@@ -1,0 +1,80 @@
+[project]
+name = "plane-conditioned-segmentation"
+version = "0.1.0"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+  "torch==2.11.0+cu128",
+  "torchvision",
+  "segmentation-models-pytorch==0.6.0",
+  "albumentations==2.0.8",
+  "numpy==2.5.4",
+  "pillow==13.0.0",
+  "matplotlib==3.11.2",
+  "scipy==1.18.1",
+]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+torchvision = { index = "pytorch-cu128" }
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[build-system]
+requires = ["setuptools==81.0.0"]
+build-backend = "setuptools.build_meta"
+
+[dependency-groups]
+dev = [
+    "coverage==7.17.0",
+    "pre-commit>=4.7.0",
+    "pytest>=9.2.0",
+    "pytest-cov>=7.1.0",
+    "radon>=6.0.1",
+    "ruff==0.17.3",
+]
+
+[project.scripts]
+plane-seg = "plane_conditioned_segmentation.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools]
+include-package-data = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+cache_dir = ".local/quality/pytest_cache"
+
+[tool.coverage.run]
+branch = true
+source = ["src/plane_conditioned_segmentation"]
+relative_files = true
+data_file = ".local/quality/.coverage"
+patch = ["subprocess"]
+
+[tool.coverage.report]
+exclude_lines = []
+exclude_also = []
+show_missing = true
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+src = ["src", "tests", "tools"]
+extend-exclude = [".local", ".runtime", "runs", "data", "archive"]
+
+[tool.ruff.format]
+# The codebase consistently uses single quotes.
+quote-style = "single"
+
+[tool.ruff.lint]
+# Import sorting only; enable further rule sets deliberately.
+select = ["I"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["plane_conditioned_segmentation"]

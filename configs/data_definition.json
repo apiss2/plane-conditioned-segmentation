@@ -1,0 +1,111 @@
+{
+  "targets": [
+    {
+      "id": 0,
+      "name": "aorta",
+      "source_plane_id": 1,
+      "source_plane": "abdomcirc_segmentare.zip",
+      "source_cached_class_id": 1
+    },
+    {
+      "id": 1,
+      "name": "kidney_longitudinal",
+      "source_plane_id": 6,
+      "source_plane": "longkidney_segmentare.zip",
+      "source_cached_class_id": 12
+    },
+    {
+      "id": 2,
+      "name": "intestine",
+      "source_plane_id": 4,
+      "source_plane": "ecogenic_segmentare.zip",
+      "source_cached_class_id": 11
+    },
+    {
+      "id": 3,
+      "name": "gallbladder",
+      "source_plane_id": 5,
+      "source_plane": "gallbladder_segmentare.zip",
+      "source_cached_class_id": 10
+    },
+    {
+      "id": 4,
+      "name": "wall_and_cord_insertion",
+      "source_plane_id": 7,
+      "source_plane": "transabdomcordinsr_segmentare.zip",
+      "source_cached_class_id": 21
+    },
+    {
+      "id": 5,
+      "name": "calvaria_enclosed_region",
+      "source_plane_id": 9,
+      "source_plane": "translamic.zip",
+      "source_cached_class_id": 4
+    },
+    {
+      "id": 6,
+      "name": "csp_transventricular",
+      "source_plane_id": 10,
+      "source_plane": "transventricular.zip",
+      "source_cached_class_id": 8
+    }
+  ],
+  "classes": [
+    "anteriorhorn",
+    "aorta",
+    "basin",
+    "bladder",
+    "calvaria",
+    "cb",
+    "cm",
+    "confluence",
+    "csp",
+    "fornix",
+    "gallbladder",
+    "intestine",
+    "kidney",
+    "posteriorhorn",
+    "rib",
+    "sept",
+    "spine",
+    "stomach",
+    "sylvian",
+    "th",
+    "vessels",
+    "wallandcord"
+  ],
+  "class_map": {
+    "abdomcirc_segmentare.zip": [
+      "aorta",
+      "confluence",
+      "rib",
+      "spine",
+      "stomach"
+    ],
+    "longkidney_segmentare.zip": [
+      "kidney"
+    ],
+    "ecogenic_segmentare.zip": [
+      "intestine"
+    ],
+    "gallbladder_segmentare.zip": [
+      "gallbladder"
+    ],
+    "transabdomcordinsr_segmentare.zip": [
+      "wallandcord"
+    ],
+    "translamic.zip": [
+      "calvaria",
+      "csp",
+      "fornix",
+      "sylvian",
+      "th"
+    ],
+    "transventricular.zip": [
+      "anteriorhorn",
+      "csp",
+      "posteriorhorn",
+      "sept"
+    ]
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "torch_threads": 2,
+  "native_threads": 2,
+  "train_loader_workers": 2,
+  "eval_batch_size": 2,
+  "min_free_gpu_mib": 7000,
+  "pipeline_process_markers": [
+    "plane_conditioned_segmentation",
+    "plane-seg",
+    "smp_full_pipeline.py",
+    "eight_pipeline.py",
+    "eight_health.py",
+    "seven_pipeline.py",
+    "seven_health.py",
+    "large_study.py",
+    "train_hd_sizes.py",
+    "train_object_pair.py"
+  ]
+}

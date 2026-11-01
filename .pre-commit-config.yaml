@@ -1,0 +1,14 @@
+# Local hooks run the ruff pinned in uv.lock; no hook repositories are downloaded.
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-import-sort
+        name: ruff import sort
+        entry: uv run --locked --no-sync ruff check --fix
+        language: system
+        types: [python]
+      - id: ruff-format
+        name: ruff format
+        entry: uv run --locked --no-sync ruff format
+        language: system
+        types: [python]
