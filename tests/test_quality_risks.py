@@ -312,7 +312,13 @@ def test_resource_guards_without_launching_any_process(monkeypatch, tmp_path, sc
     ]
     if scenario == 'duplicate':
         ps.append(dict(ProcessId=pid + 999, ParentProcessId=1, CommandLine='plane-seg stage3-baseline --execute'))
-    query = Mock(return_value='6000, 12000, 20' if scenario == 'memory' else '1000, 12000, 20')
+    query = Mock(
+        side_effect=lambda args, **kw: (
+            ''
+            if '--query-compute-apps=pid' in args
+            else ('6000, 12000, 20' if scenario == 'memory' else '1000, 12000, 20')
+        )
+    )
     monkeypatch.setattr(core.subprocess, 'check_output', query)
     monkeypatch.setattr(
         core.subprocess,
