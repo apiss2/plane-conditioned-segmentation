@@ -28,9 +28,31 @@ def build_parser():
 
     sub = parser.add_subparsers(dest='command', required=True)
 
+    p = sub.add_parser(
+        'prepare-radam', help='Prepare six-target fresh RAdamScheduleFree comparison; no trained weight reuse'
+    )
+
+    p.add_argument('--source-experiment', default='sixplane_20261104')
+
+    p.add_argument('--execute', action='store_true')
+
     p = sub.add_parser('prepare-sixplane', help='Derive CSP-free cohort and verify/reuse frozen experts; no retraining')
 
     p.add_argument('--source-experiment', default='sevenplane_20261031')
+
+    p.add_argument('--execute', action='store_true')
+
+    p = sub.add_parser('prepare-continuation', help='Fork compatible terminal states into a separate approved continuation run')
+
+    p.add_argument('--source-experiment', default='sixplane_radam_sf_20261104')
+
+    p.add_argument('--max-epochs', type=int, choices=(300, 500), default=300)
+
+    p.add_argument('--execute', action='store_true')
+
+    p = sub.add_parser('resume-model', help='Explicit compatible Schedule-Free resume only; no completed overwrite')
+
+    p.add_argument('--model', required=True)
 
     p.add_argument('--execute', action='store_true')
 
@@ -40,7 +62,7 @@ def build_parser():
 
     p.add_argument('--definition', type=Path, default=REPO_ROOT / 'configs/sixplane_data_definition.json')
 
-    p.add_argument('--protocol', type=Path, default=REPO_ROOT / 'configs/sixplane_protocol.json')
+    p.add_argument('--protocol', type=Path, default=REPO_ROOT / 'configs/sixplane_radam_protocol.json')
 
     p.add_argument('--archives-dir', type=Path, default=os.environ.get('PCS_ARCHIVES_DIR'))
 
@@ -92,10 +114,68 @@ def build_parser():
     return parser
 
 
+def _resume_model(root, args):
+
+    from .common import read_json, sha256_file
+    from .pipeline.stages import existing_model, prerequisites, stage_models
+
+    stage = next((s for s, names in stage_models(root).items() if args.model in names), None)
+
+    if stage is None or existing_model(root, args.model)['state'] != 'partial':
+        raise ValueError('Only an explicit partial model can be resumed')
+
+    prerequisites(root, stage)
+
+    if not args.execute:
+        return dict(action='resume_partial_only', model=args.model, read_only=True)
+
+    manifest = root / 'execution_source_manifest.json'
+
+    if manifest.exists() and any(sha256_file(REPO_ROOT / p) != h for p, h in read_json(manifest)['sha256'].items()):
+        raise ValueError('Execution source changed; no partial resume')
+
+    from .training.schedulefree_training import train
+
+    target = int(args.model.split('_')[1]) if args.model.startswith('expert_') else None
+
+    mode = 'expert' if target is not None else args.model
+
+    with execution_lock():
+        try:
+            return train(args.model, mode, target, resume=True)
+        except RuntimeError as error:
+            expected = (('Terminal learning sufficiency requires review; thresholds not changed', args.model),)
+            if error.args != expected:
+                raise
+            state = existing_model(root, args.model)
+            if state['action'] != 'reuse' or not (state.get('quality_note') or '').startswith(
+                ('Budget-capped nonconvergence warning:', 'Validation-patience nonconvergence warning:')
+            ):
+                raise
+            return state
 
 
+def _prepare_continuation(root, args):
+    from .pipeline.continuation import prepare
+
+    source = experiment_root(args.source_experiment)
+    if not args.execute:
+        return prepare(root, source, max_epochs=args.max_epochs)
+    with execution_lock():
+        return prepare(root, source, True, max_epochs=args.max_epochs)
 
 
+def _prepare_radam(root, args):
+
+    from .pipeline.radam import prepare
+
+    source = experiment_root(args.source_experiment)
+
+    if not args.execute:
+        return prepare(root, source)
+
+    with execution_lock():
+        return prepare(root, source, True)
 
 
 def _prepare_sixplane(root, args):
@@ -195,6 +275,9 @@ def _verify(root, args):
 
 COMMANDS = {
     'prepare-sixplane': _prepare_sixplane,
+    'prepare-radam': _prepare_radam,
+    'prepare-continuation': _prepare_continuation,
+    'resume-model': _resume_model,
     'prepare-data': _prepare_data,
     'initialize-models': _initialize_models,
     'check-data': _check_data,

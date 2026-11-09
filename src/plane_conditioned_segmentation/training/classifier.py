@@ -41,6 +41,13 @@ def _update(m, opt, scaler, a, p, microbatch, grad_clip_norm):
 
 def train_classifier():
     assert not _stop_requested(), 'Stop requested; no classifier start'
+    from .control import load_policy
+
+    if load_policy(ROOT / 'study_plan.json') is not None:
+        from .schedulefree_training import train
+
+        return train('classifier', 'classifier')
+    assert not _stop_requested(), 'Stop requested; no classifier start'
     resources()
     seed()
     protocol = load_protocol(ROOT / 'study_plan.json')

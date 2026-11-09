@@ -80,6 +80,13 @@ def _check_stall(label, history, row, epoch, guard):
 
 def train_seg(label, mode, target=None):
     stop_check()
+    from .control import load_policy
+
+    if load_policy(ROOT / 'study_plan.json') is not None:
+        from .schedulefree_training import train
+
+        return train(label, mode, target)
+    stop_check()
     resources()
     protocol = load_protocol(ROOT / 'study_plan.json')
     rule = protocol.full_segmentation_rule

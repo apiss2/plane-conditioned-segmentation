@@ -8,7 +8,7 @@
 
 ## 何を比較するのか
 
-対象は7種類の断面・抽出対象の組です。対応するラベルと元ZIPは [configs/data_definition.json](configs/data_definition.json) に定義しています。
+対象は6種類の断面・抽出対象の組です。対応するラベルと元ZIPは [configs/sixplane_data_definition.json](configs/sixplane_data_definition.json) に定義しています。
 
 | ID | 抽出対象のラベル |
 |---|---|
@@ -18,20 +18,41 @@
 | 3 | 胆嚢（`gallbladder`） |
 | 4 | 腹壁・臍帯付着部（`wall_and_cord_insertion`） |
 | 5 | 頭蓋輪郭内の領域（`calvaria_enclosed_region`） |
-| 6 | 側脳室断面の透明中隔腔（`csp_transventricular`） |
 
 領域抽出には、グレースケール画像を入力するMobileNetV2ベースのU-Netを使います。比較する方式は次の4つです。
 
 | 方式 | 仕組み |
 |---|---|
 | expert | 断面ごとに専用モデルを1つ作る。各モデルの出力は、その断面の対象領域1つ |
-| plain | 1つの共有モデルから7対象のマスクを出力する。断面情報はモデルへ渡さない |
+| plain | 1つの共有モデルから6対象のマスクを出力する。断面情報はモデルへ渡さない |
 | FiLM | 断面情報に応じて、共有モデルの途中の特徴量を拡大・縮小したり、値を加えたりする |
 | CondConv系の方式 | 断面情報に応じて複数の畳み込みkernelを混ぜ、共有モデルの処理を変える |
 
 この実装のkernel混合は、画像から求める条件ではなく、外から与えた断面情報を使います。各方式の出力について、正解領域との重なりを表すDiceと、対象外channelへの誤検出などを比較します。断面情報は、正解の断面が分かっている場合と、独立した分類器で推定する場合を区別して評価します。
 
-学習するモデルは合計11個です。内訳は、断面分類器1個、expert 7個、共有モデルのplain・FiLM・CondConv系が各1個です。
+学習するモデルは合計10個です。内訳は、断面分類器1個、expert 6個、共有モデルのplain・FiLM・CondConv系が各1個です。
+
+## CSPを除く6対象の現在の実験
+
+現在の既定runは `sixplane_radam_sf_20261104` です。分類器1本、expert6本、plain・FiLM・CondConv各1本の計10本を、**RAdamScheduleFreeで新規学習**します。過去の7対象runと短期6対象runは保持し、結果を上書きしません。
+
+- 拡張・入力前処理・seed 17・元split・重複隔離は据え置きです。CSPは全split、出力、条件、集計から除外します。
+- 最大200 epoch、毎epoch validation、30回連続で改善なしなら早期停止します。同値は非改善、`min_delta=0`です。追加の最低epoch数・更新回数は課しません。以前の設定で進んだrunの履歴は保持し、途中変更は別の停止条件記録で追跡します。
+- LRはencoder `1e-5`、その他 `1e-3`、weight decay `1e-4`。別のLR scheduler・warmupは使いません。詳細は [設定](configs/sixplane_radam_protocol.json) と [実行規則](docs/RADAM_SCHEDULEFREE.md) を参照してください。
+- 学習順は分類器 → plain → FiLM → CondConv → expert6本です。`plan`の表示と段階依存もこの順序です。
+- 共有3本が完了した段階で、旧expertによる**学習条件の異なる暫定比較**を別runへ保存します。そのtest結果で後続学習を変更せず、最後に全新条件モデルで最終評価します。
+
+既存の6対象cohortと初期重みを持つ環境では、以下で新runを準備できます。初期重みとデータだけを継承し、学習済みモデルはコピーしません。
+
+```powershell
+uv run --locked --no-sync plane-seg --experiment my_radam_run prepare-radam --source-experiment sixplane_20261104
+uv run --locked --no-sync plane-seg --experiment my_radam_run prepare-radam --source-experiment sixplane_20261104 --execute
+uv run --locked --no-sync plane-seg --experiment my_radam_run plan
+$env:PCS_EXPERIMENT = 'my_radam_run'
+uv run --locked --no-sync python tools/run_sixplane_comparison.py
+```
+
+旧 `prepare-sixplane` は、旧expertを再利用する**旧AdamW条件のrun**専用です。現在の全モデル再学習とは区別してください。説明は [旧再利用手順](docs/SIXPLANE_REUSE.md) に残しています。旧7対象runは `--experiment sevenplane_20261031` で読み込みます。
 
 ## 実行前に必要なもの
 
@@ -59,14 +80,14 @@ uv sync --locked
 Copy-Item .env.example .env
 ```
 
-作成した`.env`を編集します。次の例では、新しい実験を`my_sevenplane_run`という名前で保存します。
+作成した`.env`を編集します。次の例では、新しい実験を`my_sixplane_run`という名前で保存します。
 
 ```dotenv
-PCS_EXPERIMENT=my_sevenplane_run
+PCS_EXPERIMENT=my_sixplane_run
 PCS_RUNS_DIR=./runs
-PCS_DATA_DIR=./data/my_sevenplane_run/cache
-PCS_ARCHIVES_DIR=./data/my_sevenplane_run/source_archives
-PCS_INITIALIZATION_DIR=./data/my_sevenplane_run/initialization
+PCS_DATA_DIR=./data/my_sixplane_run/cache
+PCS_ARCHIVES_DIR=./data/my_sixplane_run/source_archives
+PCS_INITIALIZATION_DIR=./data/my_sixplane_run/initialization
 ```
 
 | 設定 | 指定する場所・名前 |
@@ -114,7 +135,7 @@ PCS_INITIALIZATION_DIR=./data/my_sevenplane_run/initialization
 実際のmanifestには、比較する各対象の画像と固定したデータ分割を記載します。プログラムが患者groupや元splitを推測することはありません。splitをまたぐ完全重複画像は拒否しますが、近似重複や患者の独立性まで保証するものではありません。
 
 ```powershell
-uv run --env-file .env --no-sync plane-seg prepare-data --manifest ./data/private_manifest.json
+uv run --env-file .env --no-sync plane-seg prepare-data --manifest ./data/private_manifest.json --protocol ./configs/sixplane_radam_protocol.json
 uv run --env-file .env --no-sync plane-seg check-data
 ```
 
@@ -130,7 +151,7 @@ uv run --env-file .env --no-sync plane-seg initialize-models --encoder ./data/en
 
 encoderは1channel MobileNetV2の`state_dict`である必要があります。正規化JSONには`gray_mean`と`gray_std`を指定します。この処理で、各方式に使う共通の初期状態を作ります。既存の初期化ファイルは上書きしません。
 
-## 5. 分類器・expert・共有モデルを順に学習する
+## 5. 分類器・共有モデル・expertを順に学習する
 
 まず状態と実行計画を確認します。この時点では学習しません。
 
@@ -144,10 +165,10 @@ uv run --env-file .env --no-sync plane-seg stage1-classifier --plan
 
 ```powershell
 uv run --env-file .env --no-sync plane-seg stage1-classifier --execute
-uv run --env-file .env --no-sync plane-seg stage2-experts --execute
 uv run --env-file .env --no-sync plane-seg stage3-baseline --execute
 uv run --env-file .env --no-sync plane-seg stage4-film --execute
 uv run --env-file .env --no-sync plane-seg stage5-condconv --execute
+uv run --env-file .env --no-sync plane-seg stage2-experts --execute
 ```
 
 expertは`--target 0`のように対象を限定することもできます。各段階は前段階の完了を確認します。既に完了したモデルは再利用し、学習途中の結果・品質基準未達・実行競合がある場合は停止します。自動的な上書きや強制再開はしません。`--force`はありません。GPUジョブは逐次実行します。
@@ -159,7 +180,7 @@ uv run --env-file .env --no-sync plane-seg stage6-evaluate --execute
 uv run --env-file .env --no-sync plane-seg stage7-report --execute
 ```
 
-評価前に全11モデルのcheckpointを固定します。testセットでの評価はその後に行い、test結果を使ってモデルや閾値を選び直すことは禁止します。既存の評価・レポートがあれば再利用します。
+評価前に全10モデルのcheckpointを固定します。testセットでの評価はその後に行い、test結果を使ってモデルや閾値を選び直すことは禁止します。既存の評価・レポートがあれば再利用します。
 
 既存モデルの読込を追加で確認する場合は、次のコマンドを使います。validation画像で再読込結果を比較する処理であり、test評価や再学習ではありません。
 
@@ -171,7 +192,7 @@ uv run --env-file .env --no-sync plane-seg verify --inference
 
 ## 結果はどこに保存されるか
 
-設定例の場合、実行成果は`runs/my_sevenplane_run/`へまとまります。
+設定例の場合、実行成果は`runs/my_sixplane_run/`へまとまります。
 
 | 場所 | 内容 |
 |---|---|
@@ -189,13 +210,13 @@ uv run --env-file .env --no-sync plane-seg verify --inference
 
 | ファイル | 役割 |
 |---|---|
-| [configs/data_definition.json](configs/data_definition.json) | 対象と元データのラベル対応 |
-| [configs/sevenplane_protocol.json](configs/sevenplane_protocol.json) | 前処理、データ拡張、学習・最適化、品質基準、評価方法のテンプレート |
+| [configs/sixplane_data_definition.json](configs/sixplane_data_definition.json) | 対象と元データのラベル対応 |
+| [configs/sixplane_protocol.json](configs/sixplane_protocol.json) | 前処理、データ拡張、学習・最適化、品質基準、評価方法のテンプレート |
 | [configs/runtime.json](configs/runtime.json) | CPU thread数、読込worker、評価batch、必要GPUメモリなど実行環境の設定 |
 
 結果に関わる設定は、データ準備時に実験内の`study_plan.json`へ写し、その後はこの固定コピーから読みます。テンプレートを編集しても、既存実験の条件は変わりません。以前に作成した実験で不足するセクションは、`config.py`の`LEGACY_V1_SECTIONS`に記録した当時の値で扱います。
 
-必須設定の不足、設定セクション内の不明な項目、型・seed・入力サイズやbatchの不整合を検証し、問題があれば拒否します。7対象・11モデル・seed 17は現在の研究構成として固定しています。また、encoderやdecoderなどのモデル構造を変えると既存checkpointを読めなくなるため、自由に差し替えられる設定にはしていません。
+必須設定の不足、設定セクション内の不明な項目、型・seed・入力サイズやbatchの不整合を検証し、問題があれば拒否します。6対象・10モデル・seed 17は現在の研究構成として固定しています。また、encoderやdecoderなどのモデル構造を変えると既存checkpointを読めなくなるため、自由に差し替えられる設定にはしていません。
 
 ## 開発・テスト
 

@@ -1,0 +1,190 @@
+{
+  "seed": 17,
+  "full_training_jobs": [
+    {
+      "name": "classifier",
+      "task": "6way plane classification"
+    },
+    {
+      "name": "expert_0",
+      "task": "binary segmentation",
+      "target": 0,
+      "outputs": 1
+    },
+    {
+      "name": "expert_1",
+      "task": "binary segmentation",
+      "target": 1,
+      "outputs": 1
+    },
+    {
+      "name": "expert_2",
+      "task": "binary segmentation",
+      "target": 2,
+      "outputs": 1
+    },
+    {
+      "name": "expert_3",
+      "task": "binary segmentation",
+      "target": 3,
+      "outputs": 1
+    },
+    {
+      "name": "expert_4",
+      "task": "binary segmentation",
+      "target": 4,
+      "outputs": 1
+    },
+    {
+      "name": "expert_5",
+      "task": "binary segmentation",
+      "target": 5,
+      "outputs": 1
+    },
+    {
+      "name": "plain",
+      "task": "plain",
+      "outputs": 6
+    },
+    {
+      "name": "film",
+      "task": "film",
+      "outputs": 6
+    },
+    {
+      "name": "condconv",
+      "task": "condconv",
+      "outputs": 6
+    }
+  ],
+  "full_training_model_count": 10,
+  "shared_modes": [
+    "plain",
+    "film",
+    "condconv"
+  ],
+  "architecture": "SMPUnet MobileNetV2 depth5 decoder64/48/32/24/16,1ch image encoder",
+  "inputs": [
+    [
+      544,
+      384
+    ],
+    [
+      736,
+      384
+    ]
+  ],
+  "preprocessing": {
+    "image_resample": "bilinear"
+  },
+  "augmentation": {
+    "horizontal_flip_p": 0.5,
+    "affine_scale": [
+      0.85,
+      1.15
+    ],
+    "affine_translate": [
+      -0.06,
+      0.06
+    ],
+    "affine_rotate_degrees": [
+      -12,
+      12
+    ],
+    "affine_p": 0.85,
+    "contrast_limit": 0.25,
+    "contrast_p": 0.7,
+    "gamma_limit": [
+      75,
+      130
+    ],
+    "gamma_p": 0.35,
+    "noise_multiplier": [
+      0.85,
+      1.15
+    ],
+    "noise_p": 0.3,
+    "blur_sigma": [
+      0.1,
+      0.7
+    ],
+    "blur_p": 0.15
+  },
+  "full_segmentation_rule": {
+    "min_epochs": 60,
+    "min_attempted_updates": 1500,
+    "effective_batch": 16,
+    "microbatch": 2
+  },
+  "classifier_epochs": 200,
+  "classifier_rule": {
+    "effective_batch": 16,
+    "microbatch": 2,
+    "min_validation_macro_accuracy": 0.75
+  },
+  "learning_rates": {
+    "encoder": 1e-05,
+    "decoder": 0.001
+  },
+  "optimization": {
+    "weight_decay": 0.0001,
+    "grad_clip_norm": 5.0,
+    "cosine_eta_min": 1e-06,
+    "validation_every": 1
+  },
+  "stall_guard": {
+    "start_epoch": 16,
+    "window": 6,
+    "max_dice": 0.35,
+    "min_gain": 0.03
+  },
+  "sufficiency_gate": {
+    "train_dice": 0.7,
+    "global_dice": 0.6,
+    "minimum_target": 0.5,
+    "maximum_gain": 0.02,
+    "late_fraction": 0.7
+  },
+  "evaluation": {
+    "probability_threshold": 0.5,
+    "original_grid_interpolation": "bilinear"
+  },
+  "selection": "Classifier: validation macro recall; segmentation: validation mean(target macro Dice, all-six-output global macro Dice). Exact best, strict improvement, earliest tied best.",
+  "segmentation_counts": [],
+  "classification_counts": [],
+  "result_storage": "Private run artifacts only; no aggregate outcomes included in this template.",
+  "target_count": 6,
+  "comparison": "Six CSP-free tasks; all ten models freshly trained under one RAdamScheduleFree policy; no trained expert reused.",
+  "schedulefree": {
+    "optimizer": "RAdamScheduleFree",
+    "package_version": "1.4.1",
+    "betas": [
+      0.9,
+      0.999
+    ],
+    "eps": 1e-08,
+    "r": 0.0,
+    "weight_lr_power": 2.0,
+    "foreach": true,
+    "silent_sgd_phase": true,
+    "max_epochs": 200,
+    "min_epochs": 1,
+    "min_applied_updates": 0,
+    "patience": 30,
+    "min_delta": 0.0
+  },
+  "early_stopping_definition": "Every epoch; strict improvement (> best, min_delta=0), ties count as non-improvement; stop at30 consecutive non-improving validations. No extra minimum epoch/update budget; hardcap200. First validation after epoch1. NaN aborts.",
+  "scheduler": "None; no warmup; RAdam internal rectification, first silent SGD steps recorded.",
+  "expert_training": "All six experts freshly trained, same target IDs and original splits, same untrained encoder/decoder/head initialization slices.",
+  "gate_basis": "Terminal training sufficiency diagnostic remains distinct from selected best validation model; original thresholds unchanged.",
+  "training_stage_order": [
+    "stage1-classifier",
+    "stage3-baseline",
+    "stage4-film",
+    "stage5-condconv",
+    "stage2-experts"
+  ],
+  "provisional_reference_experts": "sixplane_20261104",
+  "comparison_schedule": "Classifier -> plain -> FiLM -> CondConv -> provisional fixed-old-expert evaluation -> six fresh experts -> final evaluation; no test-based condition changes.",
+  "legacy_stall_guard": "Not used in Schedule-Free loop; validation-only patience defines early stopping. Terminal sufficiency thresholds remain unchanged as a separate stage-review gate."
+}

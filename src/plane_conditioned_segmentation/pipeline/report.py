@@ -39,6 +39,7 @@ def main():
         '## Data and protocol',
         '',
         f'Segmentation counts: {plan["segmentation_counts"]}; classification counts: {plan["classification_counts"]}',
+        f'Comparison conditions: {plan.get("comparison", "See study plan")}',
         f'Cohort policy: {cohort.get("policy", "See retained cohort manifest and audit history")}. '
         'Patient independence is not established by these scores.',
         'Encoder, normalization, acquisition license and patient/group provenance require independent verification. '
@@ -49,6 +50,12 @@ def main():
         f'Classifier accuracy {s["classifier_accuracy"]:.6f}; macro recall {s["classifier_macro_accuracy"]:.6f}.',
         '',
         '## Quality assessment',
+        'For runs with stopping_policy_override.json, the base study plan retains historical minimum budgets; '
+        'the remaining experts use pure patience30 without those minima. Keep completed historical models, '
+        'in-flight transition provenance and any unavailable counterfactual best checkpoints distinct. '
+        'See reproducibility/patience_minimum_removal for the per-model impact audit.',
+        'A recorded budget-cap review may permit a finished max-epoch model with a nonconvergence warning. '
+        'Its original gate result stays FAILED; this is not evidence of convergence or a relaxed threshold.',
         '',
         *_quality_lines(),
         '',

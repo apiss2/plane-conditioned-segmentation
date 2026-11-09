@@ -64,6 +64,68 @@ def _selected_quality_note(value, protocol):
     return None
 
 
+def _budget_cap_warning(root, name, value, protocol):
+    """A recorded operational decision permits nonconvergence warnings, never a false gate pass."""
+    decision = root / 'budget_cap_review.json'
+    if not decision.is_file():
+        return None
+    review = read(decision)
+    if review.get('allow_budget_cap_nonconvergence') is not True or name not in review.get('models', []):
+        return None
+    plan = read(root / 'study_plan.json')
+    if review.get('run_protocol_sha256') != sha(root / 'study_plan.json'):
+        raise ValueError('Budget-cap review belongs to a different run protocol')
+    import dataclasses
+
+    from ..training.control import load_policy
+
+    policy = dataclasses.asdict(load_policy(root / 'study_plan.json', name))
+    policy = json.loads(json.dumps(policy))
+    budget_stop = value.get('stop_reason') == 'max_epochs' and value.get('epochs') == policy.get('max_epochs')
+    continuation = root / 'continuation_preparation.json'
+    patience_stop = (
+        review.get('allow_patience_nonconvergence') is True
+        and continuation.is_file()
+        and read(continuation).get('new_protocol_sha256') == sha(root / 'study_plan.json')
+        and value.get('stop_reason') == 'validation_patience'
+        and read(continuation).get('source_terminal_epoch', 200) < value.get('epochs', 0) < policy['max_epochs']
+        and value.get('early_stopping', {}).get('bad_checks', 0) >= policy['patience']
+        and value.get('early_stopping', {}).get('last_epoch') == value.get('epochs')
+    )
+    if (
+        value.get('optimizer_name') != 'RAdamScheduleFree'
+        or not (budget_stop or patience_stop)
+        or review.get('maximum_epochs') != policy.get('max_epochs')
+        or value.get('policy') != policy
+    ):
+        return None
+    if value.get('protocol_sha256') != review.get('training_protocol_sha256'):
+        raise ValueError('Budget-cap model training protocol differs from reviewed protocol')
+    fixed = review.get('fixed_existing_checkpoints', {}).get(name)
+    if fixed is not None and sha(root / 'full' / name / 'best.pt') != fixed:
+        raise ValueError('Reviewed fixed checkpoint changed')
+    from ..training.sufficiency import assess
+
+    history = read(root / 'full' / name / 'history.json')
+    if len(history) != value['epochs'] or any(row['epoch'] != i + 1 for i, row in enumerate(history)):
+        raise ValueError('Budget-cap history does not reach the reported terminal epoch')
+    assessment = assess(history, protocol.sufficiency_gate)
+    if assessment != value.get('terminal_learning_assessment'):
+        raise ValueError('Saved sufficiency result differs from unchanged gate recomputation')
+    gate = protocol.sufficiency_gate
+    train = assessment['terminal_train']
+    if (
+        train['macro_dice'] < gate.train_dice
+        or train['macro_global_dice'] < gate.global_dice
+        or assessment['minimum_target_train_dice'] < gate.minimum_target
+        or assessment['last20percent_selection_gain'] <= gate.maximum_gain
+    ):
+        return None
+    return (
+        ('Validation-patience nonconvergence warning: ' if patience_stop else 'Budget-capped nonconvergence warning: ')
+        + 'the original sufficiency gate remains FAILED; '
+        'train-quality thresholds passed. Fixed best checkpoint included without extra epochs or test-based tuning.'
+    )
 
 
 def existing_model(root, name):
@@ -97,8 +159,11 @@ def existing_model(root, name):
         note = None
     else:
         if value.get('learning_sufficiency_pass') is not True:
-            return _blocked(name, 'quality_review_required', 'blocked_quality_review')
-        note = _selected_quality_note(value, protocol)
+            note = _budget_cap_warning(root, name, value, protocol)
+            if note is None:
+                return _blocked(name, 'quality_review_required', 'blocked_quality_review')
+        else:
+            note = _selected_quality_note(value, protocol)
     return dict(
         name=name,
         state='completed',
@@ -182,7 +247,19 @@ def execute_stage(root, stage, target=None):
     with execution_lock():
         for model in plan['models']:
             if model['action'] != 'reuse':
-                _train(model['name'])
+                try:
+                    _train(model['name'])
+                except RuntimeError as error:
+                    expected = (
+                        ('Terminal learning sufficiency requires review; thresholds not changed', model['name']),
+                    )
+                    if error.args != expected:
+                        raise
+                    state = existing_model(root, model['name'])
+                    if state['action'] != 'reuse' or not (state.get('quality_note') or '').startswith(
+                        ('Budget-capped nonconvergence warning:', 'Validation-patience nonconvergence warning:')
+                    ):
+                        raise
     return {
         **plan,
         'execution': 'completed_or_reused',
