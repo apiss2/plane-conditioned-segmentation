@@ -10,12 +10,13 @@ import numpy as np
 import torch
 
 from ..common import SEED, STOP_FILE, num_targets, read_json, sha256_file, write_json
-from ..config import load_protocol
+from ..config import conditioning_from_plan, load_protocol
 from ..data.dataset import ROOT, Batches, ids_for, loader
 from ..evaluation.classification import evaluate as classify
 from ..evaluation.metrics import evaluate as segment
 from ..models.classifier import Classifier
 from ..models.segmentation import Model
+from .conditions import training_conditions
 from .control import EarlyStopping, load_policy, stopping_override
 from .losses import LOSS
 from .optim import update
@@ -40,6 +41,9 @@ def train(label, mode, target=None, *, resume=False):
     seed()
     plan_path = ROOT / 'study_plan.json'
     protocol = load_protocol(plan_path)
+    conditioning = conditioning_from_plan(read_json(plan_path))
+    if conditioning is not None and (mode != 'film' or target is not None):
+        raise ValueError('Condition ablation runs train FiLM only')
     policy = load_policy(plan_path, label)
     override = stopping_override(plan_path, label)
     if policy is None or protocol.optimization.validation_every != 1:
@@ -103,6 +107,8 @@ def train(label, mode, target=None, *, resume=False):
         optimizer_name='RAdamScheduleFree',
         monitor='validation_macro_recall' if classifier else 'validation_average_target_and_global_macro_Dice',
     )
+    if conditioning is not None:
+        config['condition_training'] = dataclasses.asdict(conditioning)
     config = json.loads(json.dumps(config))
     if resume:
         saved_config = read_json(out / 'configuration.json')
@@ -162,6 +168,8 @@ def train(label, mode, target=None, *, resume=False):
         protocol_sha256=config['protocol_sha256'],
         optimizer_name='RAdamScheduleFree',
     )
+    if conditioning is not None:
+        common['condition_training'] = dataclasses.asdict(conditioning)
 
     def persist(path, next_epoch, completed_batches):
         save_state(
@@ -210,6 +218,11 @@ def train(label, mode, target=None, *, resume=False):
                     model, optimizer, scaler, a, p, rule.microbatch, protocol.optimization.grad_clip_norm
                 )
             else:
+                condition_args = (
+                    {}
+                    if conditioning is None
+                    else dict(conditions=training_conditions(p, idx, epoch, conditioning, num_targets()))
+                )
                 row = update(
                     model,
                     optimizer,
@@ -220,6 +233,7 @@ def train(label, mode, target=None, *, resume=False):
                     p,
                     microbatch=rule.microbatch,
                     grad_clip_norm=protocol.optimization.grad_clip_norm,
+                    **condition_args,
                 )
                 value, step_applied = row['loss'], row['applied']
             losses.append(value)

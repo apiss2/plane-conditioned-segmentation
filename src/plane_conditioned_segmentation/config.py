@@ -7,6 +7,7 @@ Stdlib only: the dataset module reads this before numpy/torch load their native 
 """
 
 import dataclasses
+import math
 import typing
 from pathlib import Path
 
@@ -132,6 +133,30 @@ class Evaluation:
 
 
 @dataclasses.dataclass(frozen=True)
+class ConditionTraining:
+    mode: str
+    epsilon: float
+    clean_probability: float
+
+
+def conditioning_from_plan(plan):
+    if 'condition_training' not in plan:
+        return None
+    policy = _build(ConditionTraining, plan['condition_training'], 'condition_training', strict=True)
+    if policy.mode not in {'onehot', 'uniform', 'random_pair'}:
+        raise ValueError('Unknown condition training mode')
+    if not all(math.isfinite(v) and 0 <= v <= 1 for v in [policy.epsilon, policy.clean_probability]):
+        raise ValueError('Condition mixture and clean probability must be finite in [0,1]')
+    if (policy.mode == 'onehot' and (policy.epsilon != 0 or policy.clean_probability != 1)) or (
+        policy.mode == 'uniform' and policy.clean_probability != 0
+    ):
+        raise ValueError('Onehot requires epsilon0/clean1; uniform requires clean0')
+    if plan.get('schedulefree') is None:
+        raise ValueError('Condition training requires the Schedule-Free loop')
+    return policy
+
+
+@dataclasses.dataclass(frozen=True)
 class Protocol:
     seed: int
     inputs: tuple[tuple[int, int], ...]
@@ -200,6 +225,7 @@ def _build(cls, data, where, strict):
 
 def protocol_from_dict(plan, where='protocol'):
     """Validated protocol; descriptive top-level keys are ignored, legacy plans get ``LEGACY_V1_SECTIONS``."""
+    conditioning_from_plan(plan)
     merged = {**LEGACY_V1_SECTIONS, **plan}
     protocol = _build(Protocol, merged, where, strict=False)
     if protocol.seed != SEED:

@@ -36,14 +36,21 @@ def amp_step(m, opt, scaler, grad_clip_norm):
     return grad, scaler.get_scale() >= old
 
 
-def update(m, opt, scaler, a, y, v, p, *, microbatch, grad_clip_norm):
+def update(m, opt, scaler, a, y, v, p, *, microbatch, grad_clip_norm, conditions=None):
     """One effective-batch segmentation step accumulated over microbatches."""
+    if conditions is not None and (
+        conditions.shape != (len(a), num_targets())
+        or not torch.isfinite(conditions).all()
+        or not (conditions >= 0).all()
+        or not torch.allclose(conditions.sum(1), torch.ones(len(a), device=conditions.device), atol=1e-6)
+    ):
+        raise ValueError('One normalized finite condition vector per image required')
     opt.zero_grad(set_to_none=True)
     total = 0
     for j in range(0, len(a), microbatch):
         part = slice(j, j + microbatch)
         pp = p[part].cuda()
-        c = F.one_hot(pp, num_targets()).float()
+        c = F.one_hot(pp, num_targets()).float() if conditions is None else conditions[part].cuda().float()
         with torch.autocast('cuda', dtype=torch.float16):
             z = m(to_unit(a[part]), c)
         ell = loss(z, y[part].cuda(), v[part].cuda(), pp, len(a))
