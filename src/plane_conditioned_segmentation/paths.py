@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_EXPERIMENT = 'sevenplane_20261031'
+DEFAULT_EXPERIMENT = 'sixplane_radam_sf_continue500_20261105'
 
 
 def configured_path(variable, default):
