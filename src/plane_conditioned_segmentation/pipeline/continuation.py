@@ -10,7 +10,7 @@ import torch
 
 from ..common import LOCK_FILE, read_json, sha256_file, utc_now, write_json
 from ..config import load_protocol
-from ..paths import REPO_ROOT, archives_root, data_root, initialization_root
+from ..paths import REPO_ROOT, archives_root, data_root, initialization_root, is_archived_run
 from ..training.control import EarlyStopping, load_policy
 
 SHARED = ('plain', 'film', 'condconv')
@@ -121,10 +121,11 @@ def load_policy_dict(value):
 
 
 def prepare(root, source, execute=False, *, max_epochs=300):
-    root, source = Path(root), Path(source)
+    root, source = Path(root).resolve(), Path(source).resolve()
     if root.exists():
         raise ValueError('Continuation destination exists; no overwrite or duplicate fork')
-    if root.parent.resolve() != source.parent.resolve() or root.resolve() == source.resolve():
+    source_base = source.parent.parent if is_archived_run(source) else source.parent
+    if root.parent != source_base or root == source or is_archived_run(root):
         raise ValueError('Continuation must be a new sibling run')
     old_plan = read_json(source / 'study_plan.json')
     old_sha = sha256_file(source / 'study_plan.json')

@@ -145,9 +145,10 @@ def test_transition_rejects_incompatible_or_damaged_inputs(tmp_path, mutation):
 
 
 @pytest.mark.parametrize('source_epoch', [200, 300])
-def test_prepare_copies_independently_and_refuses_existing_destination(tmp_path, monkeypatch, source_epoch):
-    source = tmp_path / 'origin'
-    source.mkdir()
+@pytest.mark.parametrize('archived', [False, True])
+def test_prepare_copies_independently_and_refuses_existing_destination(tmp_path, monkeypatch, source_epoch, archived):
+    source = tmp_path / 'runs' / 'origin'
+    source.mkdir(parents=True)
     ck, config, h, new_policy, _, _ = checkpoint(source, source_epoch=source_epoch)
     plan = read_json(source / 'study_plan.json')
     oldsha = sha256_file(source / 'study_plan.json')
@@ -162,9 +163,9 @@ def test_prepare_copies_independently_and_refuses_existing_destination(tmp_path,
     write_json(
         source / 'data_references.json',
         dict(
-            immutable_data_source='../cache',
-            source_archives='../archives',
-            initialization_source='../init',
+            immutable_data_source='../../cache',
+            source_archives='../../archives',
+            initialization_source='../../init',
             manifest_sha256=sha256_file(cache / 'manifest.json'),
             split_sha256=sha256_file(cache / 'split.npy'),
             cohort_sha256=sha256_file(source / 'cohort.json'),
@@ -186,8 +187,15 @@ def test_prepare_copies_independently_and_refuses_existing_destination(tmp_path,
             write_json(folder / 'history.json', h)
     write_json(source / 'FINAL_MODEL_LOCK.json', dict(checkpoints=locks))
     write_json(source / 'COMPARISON_COMPLETE.json', dict(done=True))
+    if archived:
+        archive = tmp_path / 'runs/archive'
+        archive.mkdir()
+        write_json(archive / 'ARCHIVE_LAYOUT.json', {})
+        source = source.rename(archive / 'origin')
+        with pytest.raises(ValueError, match='sibling'):
+            prepare(archive / 'forbidden', source, max_epochs=new_policy.max_epochs)
     before = {p: p.read_bytes() for p in source.rglob('*') if p.is_file()}
-    dest = tmp_path / 'continued'
+    dest = tmp_path / 'runs/continued'
     assert prepare(dest, source, max_epochs=new_policy.max_epochs)['continued_models'] == list(SHARED)
     assert not dest.exists()
     # Real files and optimizer states are used; no train/evaluate call is involved.
