@@ -244,6 +244,9 @@ def selected_output(m, ids, conditions, selected):
 
 def _verify_lock():
     lock = read_json(ROOT / LOCK_FILE)
+    for filename, key in [('study_plan.json', 'study_plan_sha256'), ('cohort.json', 'cohort_sha256')]:
+        if sha(ROOT / filename) != lock.get(key):
+            raise ValueError('Frozen evaluation input changed: ' + filename)
     assert lock['full_training_models'] == full_model_count()
     assert all(sha(ROOT / path) == digest for path, digest in lock['checkpoints'].items())
 

@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 import torch
 
+from plane_conditioned_segmentation.common import sha256_file, write_json
 from plane_conditioned_segmentation.evaluation import classification, final
 from plane_conditioned_segmentation.evaluation import metrics as evaluation
 
@@ -147,3 +148,27 @@ def test_classifier_confusion_macro_and_sorted_predictions(monkeypatch, cpu_cuda
 def test_aggregation_refuses_empty_or_nonfinite_metrics(rows):
     with pytest.raises(ValueError):
         evaluation.summarize(rows)
+
+
+
+
+@pytest.mark.parametrize('changed', [None, 'study_plan.json', 'cohort.json'])
+def test_final_evaluation_rejects_changed_frozen_inputs(tmp_path, monkeypatch, changed):
+    for filename in ['study_plan.json', 'cohort.json']:
+        write_json(tmp_path / filename, {'value': 1})
+    write_json(
+        tmp_path / 'FINAL_MODEL_LOCK.json',
+        dict(
+            full_training_models=11,
+            checkpoints={},
+            study_plan_sha256=sha256_file(tmp_path / 'study_plan.json'),
+            cohort_sha256=sha256_file(tmp_path / 'cohort.json'),
+        ),
+    )
+    monkeypatch.setattr(final, 'ROOT', tmp_path)
+    if changed:
+        write_json(tmp_path / changed, {'value': 2})
+        with pytest.raises(ValueError, match='Frozen evaluation input changed'):
+            final._verify_lock()
+    else:
+        final._verify_lock()
