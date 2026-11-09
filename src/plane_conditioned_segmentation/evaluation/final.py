@@ -94,6 +94,8 @@ def _original_truth(text, local, g):
     width, height = g['original_width'], g['original_height']
     mask = Image.new('1', (width, height))
     for line in text.splitlines():
+        if not line.strip():
+            continue
         values = list(map(float, line.split()))
         if int(values[0]) == local:
             xy = np.array(values[1:]).reshape(-1, 2)

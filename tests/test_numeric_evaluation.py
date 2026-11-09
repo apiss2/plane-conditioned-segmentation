@@ -150,6 +150,14 @@ def test_aggregation_refuses_empty_or_nonfinite_metrics(rows):
         evaluation.summarize(rows)
 
 
+def test_original_polygon_accepts_same_blank_lines_as_preparation():
+    from plane_conditioned_segmentation.data.preparation import _rasterize
+
+    text = '\n0 0 0 1 0 1 1 0 1\n  \n'
+    original = final._original_truth(text, 0, dict(original_width=4, original_height=4))
+    cached = _rasterize(text.splitlines(), ['target'], ['target'], (4, 4), 4, 4, 0, 0)[0]
+    np.testing.assert_array_equal(original, cached)
+    assert original.sum() == 16
 
 
 @pytest.mark.parametrize('changed', [None, 'study_plan.json', 'cohort.json'])
