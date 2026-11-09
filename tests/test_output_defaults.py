@@ -8,7 +8,7 @@ def test_default_selects_latest_completed_experiment(monkeypatch, tmp_path):
     monkeypatch.delenv('PCS_EXPERIMENT', raising=False)
     monkeypatch.delenv('PCS_RUNS_DIR', raising=False)
     monkeypatch.setattr(paths, 'REPO_ROOT', tmp_path)
-    expected = 'sixplane_radam_sf_continue500_20261105'
+    expected = 'final'
     assert paths.DEFAULT_EXPERIMENT == expected
     assert paths.experiment_root() == tmp_path / 'runs' / expected
     assert build_parser().parse_args(['status']).experiment == expected

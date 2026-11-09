@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_EXPERIMENT = 'sixplane_radam_sf_continue500_20261105'
+DEFAULT_EXPERIMENT = 'final'
 
 
 def configured_path(variable, default):
@@ -18,7 +18,21 @@ def experiment_root(name=None):
     name = name or os.environ.get('PCS_EXPERIMENT', DEFAULT_EXPERIMENT)
     if not re.fullmatch(r'[A-Za-z0-9_-]+', name):
         raise ValueError('Experiment must be a simple name, not a path')
-    return configured_path('PCS_RUNS_DIR', REPO_ROOT / 'runs') / name
+    base = configured_path('PCS_RUNS_DIR', REPO_ROOT / 'runs')
+    current = base / name
+    archived = base / 'archive' / name
+    return archived if not current.exists() and is_archived_run(archived) and archived.is_dir() else current
+
+
+def is_archived_run(root):
+    return root.parent.name == 'archive' and (root.parent / 'ARCHIVE_LAYOUT.json').is_file()
+
+
+def _reference_base(root, reference):
+    # Archived records keep their original bytes, including ../../data references.
+    # Resolve those records from their original logical runs/<name> location.
+    external = Path(reference).parts[:2] == ('..', '..')
+    return root.parent.parent / root.name if is_archived_run(root) and external else root
 
 
 def prepared_data_root(root):
@@ -26,11 +40,15 @@ def prepared_data_root(root):
 
 
 def data_root(root, reference):
-    return configured_path('PCS_DATA_DIR', root / reference['immutable_data_source'])
+    return configured_path(
+        'PCS_DATA_DIR', _reference_base(root, reference['immutable_data_source']) / reference['immutable_data_source']
+    )
 
 
 def archives_root(root, reference):
-    return configured_path('PCS_ARCHIVES_DIR', root / reference['source_archives'])
+    return configured_path(
+        'PCS_ARCHIVES_DIR', _reference_base(root, reference['source_archives']) / reference['source_archives']
+    )
 
 
 def initialization_root(root):
@@ -38,7 +56,7 @@ def initialization_root(root):
     if refs.exists():
         reference = json.loads(refs.read_text(encoding='utf-8'))
         if reference.get('initialization_source'):
-            default = root / reference['initialization_source']
+            default = _reference_base(root, reference['initialization_source']) / reference['initialization_source']
         else:
             default = data_root(root, reference).parent / 'initialization'
     else:

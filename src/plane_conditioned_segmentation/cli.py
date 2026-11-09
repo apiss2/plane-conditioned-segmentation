@@ -13,7 +13,7 @@ from .pipeline.stages import STAGES, evaluate_stage, execute_stage, execution_lo
 def build_parser():
     parser = argparse.ArgumentParser(
         prog='plane-seg',
-        description='Staged plane-conditioned segmentation. Plans/read-only by default; no automatic retraining.',
+        description='Read-only final results by default; choose a separate --experiment for new training.',
     )
     parser.add_argument('--experiment', default=os.environ.get('PCS_EXPERIMENT', DEFAULT_EXPERIMENT))
     sub = parser.add_subparsers(dest='command', required=True)
@@ -29,12 +29,12 @@ def build_parser():
     p.add_argument('--encoder', type=Path, required=True)
     p.add_argument('--metadata', type=Path, required=True)
     sub.add_parser('check-data', help='Read cache hashes, split counts and one training sample')
-    sub.add_parser('status', help='Show current seven stages and registered artifact locations')
+    sub.add_parser('status', help='Show selected final models or historical training stages')
     p = sub.add_parser(
         'register-existing', help='Register already imported completed artifacts without training or evaluation'
     )
     p.add_argument('--execute', action='store_true', help='Write new run_manifest.json only; never overwrite')
-    sub.add_parser('plan', help='Show all stages and existing artifact states')
+    sub.add_parser('plan', help='Show final result inventory or a separate experiment plan')
     for name in STAGES:
         p = sub.add_parser(name, help='Plan or explicitly execute this stage, reusing existing frozen models')
         p.add_argument('--plan', action='store_true', help='Read-only plan (default)')
@@ -150,7 +150,14 @@ def main(argv=None):
         if getattr(args, 'execute', False) and getattr(args, 'plan', False):
             parser.error('--plan and --execute are mutually exclusive')
         handler = _run_stage if args.command in STAGES else COMMANDS[args.command]
-        result = handler(root, args)
+        from .paths import is_archived_run
+        from .pipeline.results import is_final_result, run_command
+
+        if is_archived_run(root) and (
+            getattr(args, 'execute', False) or args.command in {'prepare-data', 'initialize-models'}
+        ):
+            raise ValueError('Archived runs are read-only; prepare a new experiment instead')
+        result = run_command(root, args) if is_final_result(root) else handler(root, args)
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
     except (ValueError, FileNotFoundError) as error:
