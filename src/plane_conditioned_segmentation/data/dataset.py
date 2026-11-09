@@ -20,7 +20,7 @@ import numpy as np  # noqa: E402
 import torch  # noqa: E402
 from torch.utils.data import DataLoader, Dataset, Sampler  # noqa: E402
 
-from ..common import NUM_TARGETS, SEED, SPLIT_NAMES, read_json, sha256_file  # noqa: E402
+from ..common import num_targets, SEED, SPLIT_NAMES, read_json, sha256_file  # noqa: E402
 from ..paths import archives_root, data_root, experiment_root  # noqa: E402
 
 ROOT = experiment_root()
@@ -83,7 +83,7 @@ def ids_for(split, planes=None, classification=False):
     plane = np.load(DATA / 'plane.npy')
     splits = np.load(DATA / 'split.npy')
     area = np.load(DATA / 'areas.npy')
-    planes = list(range(NUM_TARGETS)) if planes is None else list(planes)
+    planes = list(range(num_targets())) if planes is None else list(planes)
     keep = np.zeros(len(plane), bool)
     for p in planes:
         keep |= (plane == OLD_PLANES[p]) & ((area[:, OLD_CLASSES[p]] > 0) | classification)
@@ -125,7 +125,7 @@ class Images(Dataset):
         w = int(self.widths[idx])
         height = self.x.shape[1]
         a = np.array(self.x[idx, :, :w])
-        masks = np.zeros((height, w, NUM_TARGETS), np.uint8)
+        masks = np.zeros((height, w, num_targets()), np.uint8)
         masks[:, :, p] = np.unpackbits(self.y[idx, OLD_CLASSES[p], :, : w // 8], axis=-1)
         g = self.geom[idx]
         valid = np.zeros((height, w), np.uint8)

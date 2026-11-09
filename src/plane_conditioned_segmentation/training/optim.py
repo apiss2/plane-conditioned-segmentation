@@ -3,7 +3,7 @@
 import torch
 import torch.nn.functional as F
 
-from ..common import NUM_TARGETS
+from ..common import num_targets
 from ..data.batch import to_unit
 from .losses import loss
 
@@ -43,7 +43,7 @@ def update(m, opt, scaler, a, y, v, p, *, microbatch, grad_clip_norm):
     for j in range(0, len(a), microbatch):
         part = slice(j, j + microbatch)
         pp = p[part].cuda()
-        c = F.one_hot(pp, NUM_TARGETS).float()
+        c = F.one_hot(pp, num_targets()).float()
         with torch.autocast('cuda', dtype=torch.float16):
             z = m(to_unit(a[part]), c)
         ell = loss(z, y[part].cuda(), v[part].cuda(), pp, len(a))

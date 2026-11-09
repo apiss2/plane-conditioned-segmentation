@@ -8,7 +8,7 @@ import time
 import numpy as np
 import torch
 
-from ..common import NUM_TARGETS, SEED, STOP_FILE, read_json
+from ..common import SEED, STOP_FILE, num_targets, read_json
 from ..common import write_json as dump
 from ..config import load_protocol
 from ..data.dataset import ROOT, Batches, ids_for, loader
@@ -95,7 +95,7 @@ def train_seg(label, mode, target=None):
         label=label,
         mode=mode,
         target=target,
-        output_channels=1 if target is not None else NUM_TARGETS,
+        output_channels=1 if target is not None else num_targets(),
         seed=SEED,
         epochs=epochs,
         train_images=len(train),

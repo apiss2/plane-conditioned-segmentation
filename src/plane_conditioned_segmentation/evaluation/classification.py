@@ -3,7 +3,7 @@
 import numpy as np
 import torch
 
-from ..common import NUM_TARGETS
+from ..common import num_targets
 from ..data.batch import to_unit
 from ..data.dataset import loader
 
@@ -14,7 +14,7 @@ def evaluate(m, ids):
     m.eval()
     dl, _ = loader(ids)
     rows = []
-    confusion = np.zeros((NUM_TARGETS, NUM_TARGETS), np.int64)
+    confusion = np.zeros((num_targets(), num_targets()), np.int64)
     for a, _y, _v, p, idx in dl:
         q = m(to_unit(a)).softmax(1).cpu().numpy()
         for j, i in enumerate(idx):

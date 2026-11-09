@@ -3,11 +3,11 @@
 import datetime
 import json
 
-from ..common import FULL_MODEL_COUNT, LOCK_FILE, SEED
+from ..common import LOCK_FILE, SEED, full_model_count
 from ..common import read_json as read
 from ..common import sha256_file as sha
 from ..paths import data_root
-from .stages import STAGES, existing_model
+from .stages import existing_model, stage_models
 
 MODEL_ARTIFACTS = [
     ('checkpoint', 'best.pt'),
@@ -32,7 +32,7 @@ FROZEN_RUN_FILES = [
 
 def describe(root):
     stages = []
-    for stage, names in STAGES.items():
+    for stage, names in stage_models(root).items():
         models = []
         for name in names:
             row = existing_model(root, name)
@@ -100,15 +100,15 @@ def _record(root, status, plan, summary):
 
 def registration(root, execute=False):
     status = describe(root)
-    if not status['complete'] or status['model_count'] != FULL_MODEL_COUNT:
-        raise ValueError('All 11 models, saved evaluation and report must exist before registration')
+    if not status['complete'] or status['model_count'] != full_model_count(root):
+        raise ValueError('All run models, saved evaluation and report must exist before registration')
     lock = read(root / LOCK_FILE)
     plan = read(root / 'study_plan.json')
     refs = read(root / 'data_references.json')
     summary = read(root / 'final_evaluation/summary.json')
     if (
-        len(lock['checkpoints']) != FULL_MODEL_COUNT
-        or summary['full_training_models'] != FULL_MODEL_COUNT
+        len(lock['checkpoints']) != full_model_count(root)
+        or summary['full_training_models'] != full_model_count(root)
         or summary['seed'] != SEED
     ):
         raise ValueError('Unexpected frozen run protocol')
@@ -120,10 +120,12 @@ def registration(root, execute=False):
         previous.pop('registered_utc', None)
         if previous != record:
             raise ValueError('Registered artifact contract changed; review without overwriting registration')
-        return dict(action='reuse_registration', manifest=str(path), complete=True, models=FULL_MODEL_COUNT)
+        return dict(action='reuse_registration', manifest=str(path), complete=True, models=full_model_count(root))
     if not execute:
         return dict(action='register_existing_completed_run', manifest=str(path), read_only=True, record=record)
     record['registered_utc'] = datetime.datetime.now(datetime.timezone.utc).isoformat()
     with path.open('x', encoding='utf-8') as f:
         json.dump(record, f, indent=2)
-    return dict(action='registered_existing_completed_run', manifest=str(path), complete=True, models=FULL_MODEL_COUNT)
+    return dict(
+        action='registered_existing_completed_run', manifest=str(path), complete=True, models=full_model_count(root)
+    )

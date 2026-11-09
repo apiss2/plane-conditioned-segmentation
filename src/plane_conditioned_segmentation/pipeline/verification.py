@@ -5,7 +5,7 @@ import os
 import sys
 from pathlib import Path
 
-from ..common import FULL_MODEL_COUNT, LOCK_FILE, NUM_TARGETS, utc_now
+from ..common import LOCK_FILE, full_model_count, num_targets, utc_now
 from ..common import read_json as read
 from ..common import sha256_file as sha
 from ..config import load_runtime
@@ -85,7 +85,7 @@ def _inference_checks(root, plan):
             for idx in selected:
                 a, _y, _v, p, _ = Images([idx])[0]
                 x = a[None].float() / 255
-                c = F.one_hot(torch.tensor([p]), NUM_TARGETS).float()
+                c = F.one_hot(torch.tensor([p]), num_targets()).float()
                 z = model(x, c)
                 again = reloaded(x, c)
                 delta = float((z - again).abs().max())
@@ -99,7 +99,7 @@ def _inference_checks(root, plan):
             a, *_ = Images([idx])[0]
             probs = classifier(a[None].float() / 255).softmax(1)
             assert (
-                probs.shape == (1, NUM_TARGETS) and torch.isfinite(probs).all() and abs(float(probs.sum()) - 1) < 1e-5
+                probs.shape == (1, num_targets()) and torch.isfinite(probs).all() and abs(float(probs.sum()) - 1) < 1e-5
             )
     return dict(
         split_counts=counts,
@@ -114,7 +114,7 @@ def verify(root, inference=False, forbid_source=None, audit_dir=None):
     if forbid_source:
         _install_source_guard(forbid_source, blocked)
     lock = read(root / LOCK_FILE)
-    assert len(lock['checkpoints']) == FULL_MODEL_COUNT
+    assert len(lock['checkpoints']) == full_model_count(root)
     assert all(sha(root / path) == digest for path, digest in lock['checkpoints'].items())
     summary = read(root / 'final_evaluation/summary.json')
     plan = read(root / 'study_plan.json')
@@ -122,7 +122,7 @@ def verify(root, inference=False, forbid_source=None, audit_dir=None):
     result = dict(
         utc=utc_now(),
         experiment=root.name,
-        all_11_checkpoint_hashes_match=True,
+        all_checkpoint_hashes_match=True,
         private_aggregate_results_identical=aggregate_match,
         one_environment=str(REPO_ROOT / '.venv'),
         new_training=False,

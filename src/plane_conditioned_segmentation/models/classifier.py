@@ -3,7 +3,7 @@
 import torch
 from torch import nn
 
-from ..common import NUM_TARGETS
+from ..common import num_targets
 from .segmentation import Model, freeze_batchnorm
 
 
@@ -16,7 +16,7 @@ class Classifier(nn.Module):
         self.encoder = base.network.encoder
         self.register_buffer('mean', base.mean)
         self.register_buffer('std', base.std)
-        self.head = nn.Linear(self.encoder.out_channels[-1], NUM_TARGETS)
+        self.head = nn.Linear(self.encoder.out_channels[-1], num_targets())
 
     def train(self, mode=True):
         super().train(mode)

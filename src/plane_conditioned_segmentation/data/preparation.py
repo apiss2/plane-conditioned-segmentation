@@ -7,7 +7,7 @@ import os
 import tempfile
 from pathlib import Path, PurePosixPath
 
-from ..common import NUM_TARGETS, SEED, SPLIT_NAMES
+from ..common import num_targets, SEED, SPLIT_NAMES
 from ..common import read_json as read
 from ..common import sha256_file as sha
 from ..common import write_json as dump
@@ -222,10 +222,10 @@ def _prepare(manifest, definition, root, data, archives, protocol, spool):
     settings = protocol_from_dict(template, Path(protocol).name)
     targets = spec['targets']
     classes = spec['classes']
-    if len(targets) != NUM_TARGETS or [t['id'] for t in targets] != list(range(NUM_TARGETS)):
-        raise ValueError('Exactly seven ordered targets required')
+    if not 2 <= len(targets) <= 7 or [t['id'] for t in targets] != list(range(len(targets))):
+        raise ValueError('Two through seven contiguous ordered targets required')
     byplane = {t['source_plane_id']: t for t in targets}
-    if len(byplane) != NUM_TARGETS or not records:
+    if len(byplane) != len(targets) or not records:
         raise ValueError('Distinct source planes and nonempty explicit manifest required')
     # Validate all inputs before creating output; spool one decoded image at a time.
     seen = {}
@@ -304,7 +304,7 @@ def initialize(root, encoder, metadata):
     from ..models.segmentation import build_unet
 
     torch.manual_seed(SEED)
-    network = build_unet(NUM_TARGETS)
+    network = build_unet(num_targets())
     network.encoder.load_state_dict(state)
     root.mkdir(parents=True, exist_ok=True)
     dump(root / 'encoder_weights_metadata.json', value)

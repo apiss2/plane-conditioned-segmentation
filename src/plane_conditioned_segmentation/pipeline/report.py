@@ -1,10 +1,10 @@
 """Generate private run reports from saved artifacts, without embedded study outcomes."""
 
-from ..common import NUM_TARGETS
+from ..common import num_targets
 from ..common import read_json as read
 from ..data.dataset import ROOT
 
-MODEL_NAMES = ['classifier', *[f'expert_{i}' for i in range(NUM_TARGETS)], 'plain', 'film', 'condconv']
+MODEL_NAMES = ['classifier', *[f'expert_{i}' for i in range(num_targets())], 'plain', 'film', 'condconv']
 
 
 def _score_lines(summary):

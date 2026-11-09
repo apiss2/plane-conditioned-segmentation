@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from ..common import NUM_TARGETS
+from ..common import num_targets
 from ..data.batch import to_unit
 from ..data.dataset import CLASSES, PROTOCOL, Images
 from .metrics import EPS
@@ -26,7 +26,7 @@ def visualize(m, ids, path):
     fig, axes = plt.subplots(len(ids), 4, figsize=(16, 3 * len(ids)), squeeze=False)
     for j in range(len(ids)):
         a, y, v, p, idx = ds[j]
-        c = F.one_hot(torch.tensor([p], device='cuda'), NUM_TARGETS).float()
+        c = F.one_hot(torch.tensor([p], device='cuda'), num_targets()).float()
         z = m(to_unit(a[None]), c)[0].sigmoid().cpu().numpy()
         pred = (z > threshold) & v.numpy().astype(bool)
         gt = y[p].numpy().astype(bool)
@@ -47,7 +47,7 @@ def visualize(m, ids, path):
         row[2].set_title('greenTP redFP blueFN')
         if m.target is None:
             # Show the non-target channel with the most predicted pixels.
-            others = [ch for ch in range(NUM_TARGETS) if ch != p]
+            others = [ch for ch in range(num_targets()) if ch != p]
             worst = max(others, key=lambda ch: int(pred[ch].sum()))
             mask = pred[worst]
             _overlay(row[3], mask, 'autumn', 0.6)

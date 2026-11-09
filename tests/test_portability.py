@@ -104,7 +104,15 @@ raise SystemExit(main(sys.argv[2:]))
                 self.assertEqual(r.returncode, 0, r.stderr)
                 return json.loads(r.stdout)
 
-            output = cli('prepare-data', '--manifest', str(manifest))
+            output = cli(
+                'prepare-data',
+                '--manifest',
+                str(manifest),
+                '--definition',
+                str(REPO_ROOT / 'configs/data_definition.json'),
+                '--protocol',
+                str(REPO_ROOT / 'configs/sevenplane_protocol.json'),
+            )
             self.assertEqual(output['images'], 21)
             data = cli('check-data')
             self.assertEqual(data['segmentation_counts'], [7, 7, 7])

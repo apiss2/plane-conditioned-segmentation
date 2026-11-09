@@ -7,11 +7,14 @@ from pathlib import Path
 from unittest.mock import patch
 
 from plane_conditioned_segmentation import cli
+from plane_conditioned_segmentation.config import PROTOCOL_TEMPLATE
 from plane_conditioned_segmentation.pipeline import stages
 
 
 class ExecutionTests(unittest.TestCase):
     def result(self, root, name, **extra):
+        if not (root / 'study_plan.json').exists():
+            (root / 'study_plan.json').write_text(PROTOCOL_TEMPLATE.read_text(encoding='utf-8'))
         folder = root / 'full' / name
         folder.mkdir(parents=True)
         (folder / 'best.pt').write_bytes(b'fixture')

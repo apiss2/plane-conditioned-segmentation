@@ -6,8 +6,6 @@ import json
 from pathlib import Path
 
 SEED = 17
-NUM_TARGETS = 7
-FULL_MODEL_COUNT = 11
 SPLIT_NAMES = ('train', 'val', 'test')
 
 LOCK_FILE = 'FINAL_MODEL_LOCK.json'
@@ -32,3 +30,21 @@ def sha256_file(path):
 
 def utc_now():
     return datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+
+def num_targets(root=None):
+    """Target count of the selected run; historical seven-target runs remain readable."""
+    from .paths import experiment_root
+
+    root = Path(root) if root is not None else experiment_root()
+    path = root / 'confirmed_targets.json'
+    if not path.exists():
+        return 7  # Historical/preparation callers without a run definition.
+    targets = read_json(path)['targets']
+    if not 2 <= len(targets) <= 7 or [t['id'] for t in targets] != list(range(len(targets))):
+        raise ValueError('Run requires 2 through 7 contiguous ordered target IDs')
+    return len(targets)
+
+
+def full_model_count(root=None):
+    return num_targets(root) + 4

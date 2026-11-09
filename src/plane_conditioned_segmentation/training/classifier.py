@@ -7,7 +7,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from ..common import NUM_TARGETS, SEED, STOP_FILE
+from ..common import SEED, STOP_FILE, num_targets
 from ..common import write_json as dump
 from ..config import load_protocol
 from ..data.batch import to_unit
@@ -69,7 +69,7 @@ def train_classifier():
     dump(
         out / 'configuration.json',
         dict(
-            outputs=NUM_TARGETS,
+            outputs=num_targets(),
             seed=SEED,
             epochs=epochs,
             train_images=len(train),

@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from ..common import NUM_TARGETS
+from ..common import num_targets
 from ..data.batch import to_unit, validate_batch
 from ..data.dataset import PROTOCOL, loader
 
@@ -21,7 +21,7 @@ def metrics(z, y, v, p, target=None, *, threshold):
     """Per-image target Dice, all-channel global Dice and off-target false positives at probability >threshold."""
     validate_batch(z, y, v, p)
     p = p.long()
-    if z.shape[1] == 1 and (type(target) is not int or not 0 <= target < NUM_TARGETS):
+    if z.shape[1] == 1 and (type(target) is not int or not 0 <= target < num_targets()):
         raise ValueError('Binary expert requires target ID 0 through 6')
     pred = (z.float().sigmoid() > threshold) & v.bool()
     gt = y.bool() & v.bool()
@@ -39,7 +39,7 @@ def metrics(z, y, v, p, target=None, *, threshold):
     offtarget = torch.ones_like(pc, dtype=torch.bool)
     offtarget[batch, p] = False
     offtarget_fp = (pc * offtarget).sum(1)
-    offtarget_pixels = v.sum((1, 2, 3)) * (NUM_TARGETS - 1)
+    offtarget_pixels = v.sum((1, 2, 3)) * (num_targets() - 1)
     target_tp, target_pc, target_tc = tp[batch, p], pc[batch, p], tc[batch, p]
 
     def numpy(t):
@@ -80,10 +80,10 @@ def evaluate(m, ids, conditions=None):
     dl, _ = loader(ids)
     threshold = PROTOCOL.evaluation.probability_threshold
     rows = []
-    tp, pc, tc = np.zeros(NUM_TARGETS), np.zeros(NUM_TARGETS), np.zeros(NUM_TARGETS)
+    tp, pc, tc = np.zeros(num_targets()), np.zeros(num_targets()), np.zeros(num_targets())
     for a, y, v, p, idx in dl:
         if conditions is None:
-            c = F.one_hot(p.cuda(), NUM_TARGETS).float()
+            c = F.one_hot(p.cuda(), num_targets()).float()
         else:
             c = torch.tensor(np.stack([conditions[int(i)] for i in idx]), device='cuda').float()
         z = m(to_unit(a), c)

@@ -10,7 +10,7 @@ import torch
 import torch.nn.functional as F
 from PIL import Image, ImageDraw
 
-from ..common import FULL_MODEL_COUNT, LOCK_FILE, NUM_TARGETS, SEED, read_json
+from ..common import LOCK_FILE, SEED, full_model_count, num_targets, read_json
 from ..common import sha256_file as sha
 from ..common import write_json as dump
 from ..data.batch import to_unit
@@ -54,7 +54,7 @@ def _release_gpu():
 
 
 def _one_hot(p, device='cuda'):
-    return F.one_hot(torch.tensor([p], device=device), NUM_TARGETS).float()
+    return F.one_hot(torch.tensor([p], device=device), num_targets()).float()
 
 
 def _dice(tp, predicted, truth):
@@ -83,7 +83,7 @@ def _original_prediction(m, a, p, g):
     prob = F.interpolate(prob, size=size, mode=e.original_grid_interpolation, align_corners=False)
     pred = prob[0].cpu().numpy() > e.probability_threshold
     if m.target is not None:
-        full = np.zeros((NUM_TARGETS, *pred.shape[-2:]), bool)
+        full = np.zeros((num_targets(), *pred.shape[-2:]), bool)
         full[m.target] = pred[0]
         pred = full
     return pred
@@ -206,7 +206,7 @@ def _expert_path(p):
 def routed_experts(ids, routing):
     """Send each image to the expert chosen by ``routing[index]`` and score the union."""
     parts = []
-    for p in range(NUM_TARGETS):
+    for p in range(num_targets()):
         subset = np.array([i for i in ids if routing[int(i)] == p], np.int64)
         if not len(subset):
             continue
@@ -244,13 +244,13 @@ def selected_output(m, ids, conditions, selected):
 
 def _verify_lock():
     lock = read_json(ROOT / LOCK_FILE)
-    assert lock['full_training_models'] == FULL_MODEL_COUNT
+    assert lock['full_training_models'] == full_model_count()
     assert all(sha(ROOT / path) == digest for path, digest in lock['checkpoints'].items())
 
 
 def _classify_test(out, ids):
     """Classifier test scores plus hard/soft condition vectors and routes for the segmentation test images."""
-    eye = np.eye(NUM_TARGETS, dtype=np.float32)
+    eye = np.eye(num_targets(), dtype=np.float32)
     classifier = load_classifier(ROOT / 'full/classifier/best.pt', 'cuda')
     classification_ids = ids_for(2, classification=True)
     cls_all = classify(classifier, classification_ids)
@@ -275,7 +275,7 @@ def _all_foreground_baseline(ids):
         fill.append(dict(index=int(idx), plane=p, dice=2 * gt / (pixels + gt)))
     return dict(
         rows=fill,
-        macro_dice=_macro(fill, range(NUM_TARGETS)),
+        macro_dice=_macro(fill, range(num_targets())),
         note='Correct target channel paints entirevalidimage; no trainedmodel. Shows effect of large skullforeground.',
     )
 
@@ -287,7 +287,7 @@ def main():
     out.mkdir(exist_ok=False)
     ids = ids_for(2)
     labels = plane_ids(ids)
-    eye = np.eye(NUM_TARGETS, dtype=np.float32)
+    eye = np.eye(num_targets(), dtype=np.float32)
     oracle = {int(i): eye[p] for i, p in zip(ids, labels)}
     true_route = {int(i): int(p) for i, p in zip(ids, labels)}
     cls_all, hard, soft, route = _classify_test(out, ids)
@@ -317,7 +317,7 @@ def main():
     for name, routing in [('oracle', true_route), ('estimated', route)]:
         record(f'experts_{name}', routed_experts(ids, routing))
     expert_rows = []
-    for p in range(NUM_TARGETS):
+    for p in range(num_targets()):
         m = load(_expert_path(p), 'cuda')
         expert_rows.extend(common_original(m, ids[labels == p])['rows'])
         del m
@@ -327,10 +327,10 @@ def main():
         rows=expert_rows,
         dice=float(np.mean([r['dice'] for r in expert_rows])),
         global_dice=float(np.mean([r['global_dice'] for r in expert_rows])),
-        macro_dice=_macro(expert_rows, range(NUM_TARGETS)),
+        macro_dice=_macro(expert_rows, range(num_targets())),
     )
     timing['classifier'] = benchmark(ROOT / 'full/classifier/best.pt', classifier=True)
-    timing['expert_bank_checkpoint_bytes'] = sum(_expert_path(p).stat().st_size for p in range(NUM_TARGETS))
+    timing['expert_bank_checkpoint_bytes'] = sum(_expert_path(p).stat().st_size for p in range(num_targets()))
     baseline = _all_foreground_baseline(ids)
     dump(out / 'all_foreground_baseline.json', baseline)
     dump(out / 'timings.json', timing)
@@ -344,7 +344,7 @@ def main():
             class_names=CLASSES,
             test_segmentation_images=len(ids),
             test_classification_images=len(ids_for(2, classification=True)),
-            full_training_models=FULL_MODEL_COUNT,
+            full_training_models=full_model_count(),
             seed=SEED,
             old_results_used=False,
             baseline_macro_dice=baseline['macro_dice'],

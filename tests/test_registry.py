@@ -38,7 +38,7 @@ class RegistryTests(unittest.TestCase):
             ),
         )
         write(root / 'cohort.json', {})
-        write(root / 'confirmed_targets.json', dict(targets=[]))
+        write(root / 'confirmed_targets.json', dict(targets=[dict(id=i) for i in range(7)]))
         write(root / 'data/manifest.json', [])
         (root / 'data/split.npy').write_bytes(b'fixture data signature')
         write(

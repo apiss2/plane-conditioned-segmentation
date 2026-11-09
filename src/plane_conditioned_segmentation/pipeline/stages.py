@@ -5,7 +5,7 @@ import json
 import math
 import os
 
-from ..common import FULL_MODEL_COUNT, LOCK_FILE, NUM_TARGETS, SEED, utc_now
+from ..common import LOCK_FILE, SEED, full_model_count, num_targets, utc_now
 from ..common import read_json as read
 from ..common import sha256_file as sha
 from ..config import run_protocol
@@ -13,11 +13,22 @@ from ..paths import REPO_ROOT
 
 STAGES = {
     'stage1-classifier': ('classifier',),
-    'stage2-experts': tuple(f'expert_{i}' for i in range(NUM_TARGETS)),
+    'stage2-experts': tuple(f'expert_{i}' for i in range(num_targets())),
     'stage3-baseline': ('plain',),
     'stage4-film': ('film',),
     'stage5-condconv': ('condconv',),
 }
+
+
+def stage_models(root):
+    models = {**STAGES, 'stage2-experts': tuple(f'expert_{i}' for i in range(num_targets(root)))}
+    plan = root / 'study_plan.json' if root is not None else None
+    order = read(plan).get('training_stage_order') if plan is not None and plan.is_file() else None
+    if order is not None:
+        if len(order) != len(models) or set(order) != set(models):
+            raise ValueError('Training stage order must contain each model stage exactly once')
+        return {stage: models[stage] for stage in order}
+    return models
 
 
 def _blocked(name, state, action):
@@ -53,6 +64,8 @@ def _selected_quality_note(value, protocol):
     return None
 
 
+
+
 def existing_model(root, name):
     """State of one model folder and the action a stage run would take for it."""
     folder = root / 'full' / name
@@ -70,6 +83,13 @@ def existing_model(root, name):
         expected = read(lock)['checkpoints'].get(str(weight.relative_to(root)))
         if not expected or sha(weight) != expected:
             raise ValueError(f'{name}: frozen checkpoint hash mismatch')
+    reuse_audit = root / 'expert_reuse_audit.json'
+    if name.startswith('expert_') and reuse_audit.exists():
+        expected = next(
+            (row['checkpoint_sha256'] for row in read(reuse_audit)['reused_experts'] if row['model'] == name), None
+        )
+        if expected is None or sha(weight) != expected:
+            raise ValueError(f'{name}: reused expert checkpoint changed')
     protocol = run_protocol(root)
     if name == 'classifier':
         if not _classifier_score_ok(value, protocol):
@@ -89,14 +109,14 @@ def existing_model(root, name):
     )
 
 
-def all_model_names():
-    return [name for names in STAGES.values() for name in names]
+def all_model_names(root=None):
+    return [name for names in stage_models(root).values() for name in names]
 
 
 def stage_plan(root, stage, target=None):
-    if target is not None and target not in range(NUM_TARGETS):
-        raise ValueError('Target must be 0 through 6')
-    names = STAGES[stage]
+    if target is not None and target not in range(num_targets(root)):
+        raise ValueError('Target outside selected run definition')
+    names = stage_models(root)[stage]
     if stage == 'stage2-experts' and target is not None:
         names = (f'expert_{target}',)
     return dict(
@@ -110,7 +130,7 @@ def stage_plan(root, stage, target=None):
 
 def prerequisites(root, stage):
     prior = []
-    for key, names in STAGES.items():
+    for key, names in stage_models(root).items():
         if key == stage:
             break
         prior.extend(names)
@@ -151,6 +171,12 @@ def _train(name):
 def execute_stage(root, stage, target=None):
     plan = stage_plan(root, stage, target)
     prerequisites(root, stage)
+    if (
+        stage == 'stage2-experts'
+        and read(root / 'study_plan.json').get('reuse_experts_only')
+        and any(row['action'] != 'reuse' for row in plan['models'])
+    ):
+        raise ValueError('This run permits verified expert reuse only; expert training is forbidden')
     if any(model['action'].startswith('blocked') for model in plan['models']):
         raise ValueError('Existing partial/quality-failed run requires review; no overwrite or automatic restart')
     with execution_lock():
@@ -168,7 +194,7 @@ def _reuse_saved_evaluation(root, destination):
     if not (root / LOCK_FILE).is_file():
         raise ValueError('Saved evaluation has no fixed checkpoint lock')
     summary = read(destination)
-    if summary.get('seed') != SEED or summary.get('full_training_models') != FULL_MODEL_COUNT:
+    if summary.get('seed') != SEED or summary.get('full_training_models') != full_model_count(root):
         raise ValueError('Saved evaluation protocol mismatch')
     manifest = root / 'run_manifest.json'
     if manifest.exists():
@@ -178,7 +204,7 @@ def _reuse_saved_evaluation(root, destination):
     return dict(
         stage='stage6-evaluate',
         action='reuse_frozen_results',
-        models=FULL_MODEL_COUNT,
+        models=full_model_count(root),
         test_images=summary['test_segmentation_images'],
         summary=str(destination),
     )
@@ -191,7 +217,7 @@ def _write_model_lock(root, names):
     checkpoints = {str(w.relative_to(root)): sha(w) for w in weights}
     record = dict(
         utc=utc_now(),
-        full_training_models=FULL_MODEL_COUNT,
+        full_training_models=full_model_count(root),
         seed=SEED,
         test_never_used_for_checkpoint_selection=True,
         checkpoints=checkpoints,
@@ -202,15 +228,18 @@ def _write_model_lock(root, names):
 
 
 def evaluate_stage(root, execute=False):
-    names = all_model_names()
+    names = all_model_names(root)
     if any(existing_model(root, name)['action'] != 'reuse' for name in names):
-        raise ValueError('All 11 models must be complete before final test')
+        raise ValueError('All run models must be complete before final test')
     destination = root / 'final_evaluation/summary.json'
     if destination.exists():
         return _reuse_saved_evaluation(root, destination)
     if not execute:
         return dict(
-            stage='stage6-evaluate', action='lock_checkpoints_then_evaluate', models=FULL_MODEL_COUNT, read_only=True
+            stage='stage6-evaluate',
+            action='lock_checkpoints_then_evaluate',
+            models=full_model_count(root),
+            read_only=True,
         )
     with execution_lock():
         if (root / 'final_evaluation').exists():

@@ -8,7 +8,7 @@ import subprocess
 import numpy as np
 import torch
 
-from ..common import SEED, utc_now, write_json
+from ..common import SEED, num_targets, utc_now, write_json
 from ..config import load_runtime
 from ..paths import REPO_ROOT, experiment_root
 from .losses import LOSS
@@ -77,4 +77,7 @@ def resources():
 
 
 def checkpoint(path, m, **kw):
-    torch.save(dict(state=m.state_dict(), mode=m.mode, target=m.target, loss_recipe=LOSS, **kw), path)
+    torch.save(
+        dict(state=m.state_dict(), mode=m.mode, target=m.target, target_count=num_targets(), loss_recipe=LOSS, **kw),
+        path,
+    )

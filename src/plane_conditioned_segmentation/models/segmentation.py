@@ -8,7 +8,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from ..common import NUM_TARGETS, SEED, read_json
+from ..common import SEED, num_targets, read_json
 from ..paths import experiment_root, initialization_root
 
 ROOT = experiment_root()
@@ -64,7 +64,7 @@ class Condition(nn.Module):
         super().__init__()
         self.mode = mode
         if mode == 'film':
-            self.layer = nn.Linear(NUM_TARGETS, ch * 2, bias=False)
+            self.layer = nn.Linear(num_targets(), ch * 2, bias=False)
             self.layer.weight.data.zero_()
 
     def forward(self, x, c):
@@ -81,7 +81,7 @@ class ExternalIDKernelMixture(nn.Module):
         super().__init__()
         assert conv.groups == 1 and conv.bias is None
         self.kernels = nn.Parameter(conv.weight.detach()[None].repeat(experts, 1, 1, 1, 1))
-        self.router = nn.Linear(NUM_TARGETS, experts, bias=False)
+        self.router = nn.Linear(num_targets(), experts, bias=False)
         self.stride = conv.stride
         self.padding = conv.padding
         self.dilation = conv.dilation
@@ -115,7 +115,7 @@ class Model(nn.Module):
         assert (mode == 'expert') == (target is not None)
         self.mode = mode
         self.target = target
-        self.outputs = 1 if target is not None else NUM_TARGETS
+        self.outputs = 1 if target is not None else num_targets()
         self.network = build_unet(self.outputs)
         if initialize:
             self._load_initialization(mode, target)
@@ -177,6 +177,8 @@ class Model(nn.Module):
 
 def load(path, device='cpu'):
     ck = torch.load(path, map_location='cpu', weights_only=True)
+    if ck.get('target_count', num_targets()) != num_targets():
+        raise ValueError('Checkpoint target count differs from active run')
     m = Model(ck['mode'], ck['target'], initialize=False)
     m.load_state_dict(ck['state'])
     return m.to(device).eval()
